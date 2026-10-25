@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Trailer</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    #player { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="player"></div>
+  <script>
+    // Hosts the YouTube player for the browse app. YouTube refuses to play
+    // inside an installed TV app (it has no web address), so the app shows
+    // this page instead, served from a real address.
+    //   trailer.html?v=VIDEO_ID&mute=1&loop=1
+    // Talks to the app with postMessage: sends {event: "playing" | "ended" |
+    // "error"}, and takes {cmd: "mute" | "unmute"}.
+    var query = new URLSearchParams(location.search);
+    var id = query.get("v");
+    var muted = query.get("mute") === "1";
+    var loop = query.get("loop") === "1";
+    var player;
+
+    function tell(msg) {
+      msg.source = "trailer";
+      parent.postMessage(msg, "*");
+    }
+
+    window.onYouTubeIframeAPIReady = function () {
+      var vars = { autoplay: 1, mute: muted ? 1 : 0, controls: 0, rel: 0, playsinline: 1,
+                   iv_load_policy: 3, fs: 0, disablekb: 1 };
+      if (loop) { vars.loop = 1; vars.playlist = id; }
+      player = new YT.Player("player", {
+        videoId: id,
+        playerVars: vars,
+        events: {
+          onReady: function (e) {
+            if (muted) e.target.mute(); else e.target.unMute();
+            e.target.playVideo();
+          },
+          onStateChange: function (e) {
+            if (e.data === YT.PlayerState.PLAYING) tell({ event: "playing", muted: player.isMuted() });
+            if (e.data === YT.PlayerState.ENDED) tell({ event: "ended" });
+          },
+          onError: function (e) { tell({ event: "error", code: e.data }); },
+        },
+      });
+    };
+
+    window.addEventListener("message", function (e) {
+      if (!player || !e.data || e.data.source !== "browse") return;
+      if (e.data.cmd === "mute") player.mute();
+      if (e.data.cmd === "unmute") { player.unMute(); player.setVolume(100); }
+    });
+  </script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>
